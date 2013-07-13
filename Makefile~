@@ -1,0 +1,14 @@
+CXXFLAGS=$(shell sdl-config --cflags)
+LDFLAGS=
+LIBS=$(shell sdl-config --static-libs)
+
+all: tone
+
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+tone: tone.o
+	$(CXX) -o $@ $< $(LDFLAGS) $(LIBS)
+
+clean:
+	rm -fr tone tone.o
