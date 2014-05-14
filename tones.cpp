@@ -1,13 +1,11 @@
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_audio.h>
-#include <queue>
 #include <cmath>
 #include <stdlib.h>
-#include <functional>
-#include <vector>
 #include <fstream>
 #include <cstring>
 #include <map>
+#include <iostream>
+
+#include "tones.hpp"
 
 const int AMPLITUDE = 28000;
 const int FREQUENCY = 44100;
@@ -32,6 +30,9 @@ const double G = noteFrequency(10);
 const double Ab = noteFrequency(11);
 const double REST = 0;
 
+void BeepObject::IncTime () { t += DT; }
+
+
 double note(const double note, int octave) {
   double pitch = note * pow(2, octave - 4);
   return pitch;
@@ -51,30 +52,6 @@ double char2note(char * note) {
   else if (strcmp(note, "G") == 0) return G;
   else return Ab;
 }
-
-struct BeepObject
-{
-  double freq, duration;
-  int samplesLeft;
-  std::function<double(double, double)> volume; //volume at time (in seconds) = t
-  double t { 0.0 };
-
-  void IncTime () { t += DT; }
-};
-
-class Beeper
-{
-private:
-  double v = 0; //v for velocity
-  std::queue<BeepObject> beeps;
-public:
-  Beeper();
-  ~Beeper();
-  void beep(double freq, double duration, std::function<double(double, double)>);
-
-  void generateSamples(Sint16 *stream, int length);
-  void wait();
-};
 
 void audio_callback(void*, Uint8*, int);
 
@@ -207,10 +184,6 @@ std::function<double(double, double)> const_vol(double x) {
   return [x](double, double) { return x; };
 }
 
-struct tone {
-  double hz, duration, volume;
-  std::function<double(double, double)> attack;
-};
 
 typedef std::function<double(double, double)> AttackFun;
 typedef std::map<std::string, AttackFun> AttackMap;
@@ -328,27 +301,3 @@ std::vector<tone> read_file(std::string file) { //file is of format name.fhb
     return vsong;
   }
 }
-
-/*int main(int argc, char* argv[])
-{
-  SDL_Init(SDL_INIT_AUDIO);
-
-  //setenv(SDL_AUDIODRIVER, alsa, 1);
-
-  int duration = 1000;
-  double Hz = 220;
-  int amplitude = 28000;
-
-  Beeper b;
-  b.beep(Hz / 2, duration, amplitude / 100);
-  //b.beep(0, 20);
-  b.beep(Hz, duration, amplitude / 10);
-  //b.beep(0, 20);
-  b.beep(Hz * 2, duration, amplitude);
-  //b.beep(0, 20);
-  b.beep(Hz * 3, duration, amplitude * 10);
-  //b.beep(20, 20);
-  b.wait();
-
-  return 0;
-  }*/

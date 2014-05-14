@@ -1,12 +1,13 @@
+all: foo
 
 CXXFLAGS=-std=c++1y -g
 LIBS=-lSDL2
 
-foo: foo.o
-	$(CXX) $(CXXFLAGS) -o $@ $< $(LDFLAGS) $(LIBS)
+foo: foo.o tones.o
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)
 
-foo.o: foo.cpp hello_world-sdl.h
-
+foo.o: foo.cpp tones.hpp
+tones.o: tones.cpp tones.hpp
 
 clean:
 	rm -rf *.o hello
