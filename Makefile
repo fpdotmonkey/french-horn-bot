@@ -1,15 +1,12 @@
-CXX=clang++
-CXXFLAGS=$(shell sdl-config --cflags)
-LDFLAGS=
-LIBS=$(shell sdl-config --static-libs)
 
-all: hello_world-sdl
+CXXFLAGS=-std=c++1y -g
+LIBS=-lSDL2
 
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c -o $@ $<
+foo: foo.o
+	$(CXX) $(CXXFLAGS) -o $@ $< $(LDFLAGS) $(LIBS)
 
-hello_world-sdl: hello_world-sdl.o
-	$(CXX) -o $@ $< $(LDFLAGS) $(LIBS)
+foo.o: foo.cpp hello_world-sdl.h
+
 
 clean:
-	rm -fr hello_world-sdl hello_world-sdl.o
+	rm -rf *.o hello

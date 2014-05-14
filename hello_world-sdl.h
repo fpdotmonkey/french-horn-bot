@@ -212,25 +212,70 @@ struct tone {
   std::function<double(double, double)> attack;
 };
 
-std::function<double(double, double)> parse_attack(std::string file) {
-  std::map<std::string, std::function<double(double, double)>> articulation;
+typedef std::function<double(double, double)> AttackFun;
+typedef std::map<std::string, AttackFun> AttackMap;
 
+struct NamedAttack {
+  std::string name;
+  AttackFun fun;
+};
+
+NamedAttack articulation(std::string line) {
   char *str;
-  str = (char *)alloca(file.size() + 1);
-  memcpy(str, file.c_str(), file.size() + 1);
+  str = (char *)alloca(line.size() + 1);
+  memcpy(str, line.c_str(), line.size() + 1);
   char * data = strtok(str, "  ");
 
+  double attack_a, attack_b, attack_c, attack_d;
 
-  return [] {
-    return;
+  char * name = data;
+  data = strtok(NULL, "  ");
+  attack_a = atof(data);
+  data = strtok(NULL, "  ");
+  attack_b = atof(data);
+  data = strtok(NULL, "  ");
+  attack_c = atof(data);
+  data = strtok(NULL, "  ");
+  attack_d = atof(data);
+
+  NamedAttack named_attack { name, attack(attack_a, attack_b, attack_c, attack_d) };
+  return named_attack;
+}
+
+std::vector<NamedAttack> get_attacks(std::string file) {
+  std::string line;
+  std::ifstream fha;
+  std::vector<NamedAttack> articulations;
+  fha.open (file, std::ios::in);
+  if (fha.is_open()) {
+    while (std::getline(fha, line)) {
+      articulations.push_back(articulation(line));
+    }
+    fha.close();
+
+    return articulations;
+  }
+  else {
+    std::cout << "ERROR UNABLE TO OOPEN FILE" << std::endl;
+    return articulations;
   }
 }
 
-tone parse_string(std::string file) {
+AttackFun get_articulation(std::string articulation, std::string file) {
+  AttackFun Fun;
+  for (int i = 0; i < get_attacks(file).size(); ++i) {
+    if (articulation == get_attacks(file).at(i).name)
+      Fun = get_attacks(file).at(i).fun;
+  }
+
+  return Fun;
+}
+
+tone parse_string(std::string line) {
   tone tone;
   char *str;
-  str = (char *)alloca(file.size() + 1);
-  memcpy(str, file.c_str(), file.size() + 1);
+  str = (char *)alloca(line.size() + 1);
+  memcpy(str, line.c_str(), line.size() + 1);
   char * data = strtok(str, "  ");
   
   if (strcmp(data, "REST") != 0) {
@@ -243,10 +288,10 @@ tone parse_string(std::string file) {
     data = strtok(NULL, "  ");
     tone.volume = atof(data);
     data = strtok(NULL, "  ");
-    // note.attack  = (int)data;
-    data = strtok(NULL, "  ");
-    
-    tone.attack = attack (0.2, 0.01, 0.25, 0.1);
+    std::cout << data << "\n";
+    std::string attack (data);
+    // attack << data;
+    tone.attack = get_articulation(attack, "ATTACKS.fha");
   }
   else {
     tone.hz = 0;
@@ -279,7 +324,7 @@ std::vector<tone> read_file(std::string file) { //file is of format name.fhb
     return vsong;
   }
   else {
-    std::cout << "ERROR: UNABLE TO OPEN FILE";
+    std::cout << "ERROR: UNABLE TO OPEN FILE" << std::endl;
     return vsong;
   }
 }
