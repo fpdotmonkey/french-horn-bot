@@ -1,17 +1,65 @@
-#include <SDL.h>
-#include <SDL_audio.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_audio.h>
 #include <queue>
 #include <cmath>
 #include <stdlib.h>
+#include <functional>
+#include <vector>
+#include <fstream>
+#include <cstring>
+#include <map>
 
 const int AMPLITUDE = 28000;
 const int FREQUENCY = 44100;
+const double DT = 1.0 / double(FREQUENCY);
+
+const double A = 440;
+
+double noteFrequency(int halfSteps) {
+  return pow(pow(2.0, 1.0/12.0), halfSteps) * A;
+}
+
+const double Bb = noteFrequency(1);
+const double B = noteFrequency(2);
+const double C = noteFrequency(3);
+const double Db = noteFrequency(4);
+const double D = noteFrequency(5);
+const double Eb = noteFrequency(6);
+const double E = noteFrequency(7);
+const double F = noteFrequency(8);
+const double Gb = noteFrequency(9);
+const double G = noteFrequency(10);
+const double Ab = noteFrequency(11);
+const double REST = 0;
+
+double note(const double note, int octave) {
+  double pitch = note * pow(2, octave - 4);
+  return pitch;
+}
+
+double char2note(char * note) {
+  if (strcmp(note, "A") == 0) return A;
+  else if (strcmp(note, "Bb") == 0) return Bb;
+  else if (strcmp(note, "B") == 0) return B;
+  else if (strcmp(note, "C") == 0) return C;
+  else if (strcmp(note, "Db") == 0) return Db;
+  else if (strcmp(note, "D") == 0) return D;
+  else if (strcmp(note, "Eb") == 0) return Eb;
+  else if (strcmp(note, "E") == 0) return E;
+  else if (strcmp(note, "F") == 0) return F;
+  else if (strcmp(note, "Gb") == 0) return Gb;
+  else if (strcmp(note, "G") == 0) return G;
+  else return Ab;
+}
 
 struct BeepObject
 {
-  double freq;
+  double freq, duration;
   int samplesLeft;
-  double volume; // a number between 0 and 1
+  std::function<double(double, double)> volume; //volume at time (in seconds) = t
+  double t { 0.0 };
+
+  void IncTime () { t += DT; }
 };
 
 class Beeper
@@ -22,7 +70,8 @@ private:
 public:
   Beeper();
   ~Beeper();
-  void beep(double freq, int duration, double volume);
+  void beep(double freq, double duration, std::function<double(double, double)>);
+
   void generateSamples(Sint16 *stream, int length);
   void wait();
 };
@@ -74,9 +123,11 @@ void Beeper::generateSamples(Sint16 *stream, int length)
     bo.samplesLeft -= samplesToDo - i; //tells bo how much longer it has to play
 
     while (i < samplesToDo) {//this all says how high the sine wave ought to be.Frequency adjusts when you set the height
-      stream[i] = AMPLITUDE * bo.volume * std::sin(v * 2 * M_PI / FREQUENCY);
+      double volume = bo.volume(bo.t, bo.duration);
+      stream[i] = AMPLITUDE * volume * std::sin(v * 2 * M_PI / FREQUENCY);
       i++;
       v += bo.freq;
+      bo . IncTime();
     }
 
     if (bo.samplesLeft == 0) {
@@ -85,15 +136,15 @@ void Beeper::generateSamples(Sint16 *stream, int length)
   }
 }
 
-void Beeper::beep(double freq, int duration, double volume)
+void Beeper::beep(double freq, double duration, std::function<double(double, double)> volume)
 {
-  BeepObject bo;
-  bo.freq = freq;
-  bo.samplesLeft = duration * FREQUENCY / 1000;
-  bo.volume = volume;
+  // BeepObject bo;
+  // bo.freq = freq;
+  // bo.samplesLeft = duration * FREQUENCY / 1000;
+  // bo.volume = volume;
 
   SDL_LockAudio(); //protects the callback function
-  beeps.push(bo); //puts bo in the queue beeps
+  beeps.push(BeepObject { freq, duration, int(duration * FREQUENCY), volume });
   SDL_UnlockAudio(); //undoes SDL_LockAudio()
 }
 
@@ -116,6 +167,121 @@ void audio_callback(void *_beeper, Uint8 *_stream, int _length)
   Beeper* beeper = (Beeper*) _beeper;
 
   beeper->generateSamples(stream, length);
+}
+
+std::function<double(double)> campled(std::function<double(double)> f) {
+  return [f](double x) -> double {
+    double y = f(x);
+    return std::max (std::min (1.0, y), 0.0);
+  };
+}
+
+std::function<double(double, double)> attack (double attack_time,
+                                              double fade_out_time,
+                                              double attack_vol,
+                                              double initial_vol) {
+  double t0 = 0.0;
+  double t1 = attack_time / 2.0;
+  double t2 = attack_time;
+  double attack_difference = attack_vol - initial_vol;
+
+  return [t0, t1, t2, attack_difference,
+          fade_out_time, attack_vol, initial_vol]
+    (double t, double total_time) -> double {
+    double t3 = total_time - fade_out_time;
+    if (t < t1) {
+      return attack_vol * std::sqrt(t / t1);
+    } else if (t < t2) {
+      return attack_vol -  attack_difference * (t - t1) / (t2 - t1);
+    } else if (t < t3) {
+      return initial_vol;
+    } else {
+      double remaining = total_time - t;
+      double d = remaining / fade_out_time;
+      return initial_vol * d * d;
+    }
+  };
+}
+
+std::function<double(double, double)> const_vol(double x) {
+  return [x](double, double) { return x; };
+}
+
+struct tone {
+  double hz, duration, volume;
+  std::function<double(double, double)> attack;
+};
+
+std::function<double(double, double)> parse_attack(std::string file) {
+  std::map<std::string, std::function<double(double, double)>> articulation;
+
+  char *str;
+  str = (char *)alloca(file.size() + 1);
+  memcpy(str, file.c_str(), file.size() + 1);
+  char * data = strtok(str, "  ");
+
+
+  return [] {
+    return;
+  }
+}
+
+tone parse_string(std::string file) {
+  tone tone;
+  char *str;
+  str = (char *)alloca(file.size() + 1);
+  memcpy(str, file.c_str(), file.size() + 1);
+  char * data = strtok(str, "  ");
+  
+  if (strcmp(data, "REST") != 0) {
+    double notef = char2note(data);
+    data = strtok(NULL, "  ");
+    int octave = atoi(data);
+    tone.hz = note(notef, octave);
+    data = strtok(NULL, "  ");
+    tone.duration = atof(data);
+    data = strtok(NULL, "  ");
+    tone.volume = atof(data);
+    data = strtok(NULL, "  ");
+    // note.attack  = (int)data;
+    data = strtok(NULL, "  ");
+    
+    tone.attack = attack (0.2, 0.01, 0.25, 0.1);
+  }
+  else {
+    tone.hz = 0;
+    tone.volume = 0;
+    data = strtok(NULL, "  ");
+    tone.duration = atof(data);
+    tone.attack = const_vol(tone.volume);
+  }
+  // std::cout << tone.hz << std::endl;
+  // std::cout << tone.duration << std::endl;
+  // std::cout << tone.volume << std::endl << std::endl;
+
+  return tone;
+}
+
+std::vector<tone> read_file(std::string file) { //file is of format name.fhb
+  std::cout << "START" << std::endl;
+  std::string line;
+  std::ifstream song;
+  std::vector<tone> vsong;
+  song.open (file, std::ios::in);
+  if (song.is_open()) {
+    std::cout << "READING" << std::endl;
+    while (std::getline(song, line)) {
+      vsong.push_back(parse_string(line));
+      std::cout << "..." << std::endl;
+    }
+    song.close();
+    std::cout << "FINISHED" << std::endl;
+    return vsong;
+  }
+  else {
+    std::cout << "ERROR: UNABLE TO OPEN FILE";
+    return vsong;
+  }
 }
 
 /*int main(int argc, char* argv[])
