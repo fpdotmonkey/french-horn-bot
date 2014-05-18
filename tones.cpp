@@ -202,16 +202,30 @@ NamedAttack articulation(std::string line) {
   double attack_a, attack_b, attack_c, attack_d;
 
   char * name = data;
-  data = strtok(NULL, "  ");
-  attack_a = atof(data);
-  data = strtok(NULL, "  ");
-  attack_b = atof(data);
-  data = strtok(NULL, "  ");
-  attack_c = atof(data);
-  data = strtok(NULL, "  ");
-  attack_d = atof(data);
 
-  NamedAttack named_attack { name, attack(attack_a, attack_b, attack_c, attack_d) };
+  NamedAttack named_attack;
+  // std::cout << "PING @ articulation" << std::endl;
+  // if (strcmp(data, "") == 0) {
+  //   std::cout << "no attack" << std::endl;
+  //   named_attack = { "ZZZ", const_vol(0.3) };
+  //   return named_attack;
+  // }
+
+  if (strcmp(data, "ZZZ") != 0) {
+    data = strtok(NULL, "  ");
+    attack_a = atof(data);
+    data = strtok(NULL, "  ");
+    attack_b = atof(data);
+    data = strtok(NULL, "  ");
+    attack_c = atof(data);
+    data = strtok(NULL, "  ");
+    attack_d = atof(data);
+    named_attack = { name, attack(attack_a, attack_b, attack_c, attack_d) };
+  }
+  else {
+    named_attack = { "ZZZ", const_vol(0.3) };
+  }
+  
   return named_attack;
 }
 
@@ -229,7 +243,7 @@ std::vector<NamedAttack> get_attacks(std::string file) {
     return articulations;
   }
   else {
-    std::cout << "ERROR UNABLE TO OOPEN FILE" << std::endl;
+    std::cout << "ERROR UNABLE TO OPEN FILE-open_attack" << std::endl;
     return articulations;
   }
 }
@@ -250,8 +264,10 @@ tone parse_string(std::string line) {
   str = (char *)alloca(line.size() + 1);
   memcpy(str, line.c_str(), line.size() + 1);
   char * data = strtok(str, "  ");
+  // std::cout << "PING @ parse_string" << std::endl;
   
   if (strcmp(data, "REST") != 0) {
+    // std::cout << "PING @ beginning of parse_string condition" << std::endl;
     double notef = char2note(data);
     data = strtok(NULL, "  ");
     int octave = atoi(data);
@@ -261,12 +277,22 @@ tone parse_string(std::string line) {
     data = strtok(NULL, "  ");
     tone.volume = atof(data);
     data = strtok(NULL, "  ");
-    std::cout << data << "\n";
-    std::string attack (data);
-    // attack << data;
-    tone.attack = get_articulation(attack, "ATTACKS.fha");
+    
+    if (data == NULL) {
+      std::cout << "Unspecified attack.  Default: ZZZ" << std::endl;
+      tone.attack = const_vol(0.3);
+    }
+    else {
+      std::cout << data << "\n";
+      
+      std::string attack (data);
+      // attack << data;
+      // std::cout << "PING @ before tone.attack assigned in parse_string" << std::endl;
+      tone.attack = get_articulation(attack, "ATTACKS.fha");
+    }
   }
   else {
+    std::cout << "REST" << std::endl;
     tone.hz = 0;
     tone.volume = 0;
     data = strtok(NULL, "  ");
@@ -297,7 +323,7 @@ std::vector<tone> read_file(std::string file) { //file is of format name.fhb
     return vsong;
   }
   else {
-    std::cout << "ERROR: UNABLE TO OPEN FILE" << std::endl;
+    std::cout << "ERROR: UNABLE TO OPEN FILE-read_file" << std::endl;
     return vsong;
   }
 }
