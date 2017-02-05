@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
     Beeper b;
 
     for (const tone& n : song) {
-      b . beep (n . hz, n . duration, n.attack);
+        b . beep (n . hz, n . duration, n . volume, n . attack);
     }
 
     b.wait();

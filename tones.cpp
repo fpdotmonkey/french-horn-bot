@@ -89,18 +89,18 @@ void Beeper::generateSamples(Sint16 *stream, int length)
 
     if (beeps.empty()) { //if there are no notes to play,
       while (i < length) {
-	stream[i] = 0; //play silence.
-	i++;
+          stream[i] = 0; //play silence.
+          i++;
       }
       return;
     } //otherwise,
-    BeepObject& bo = beeps.front(); //put a note from the queue and put in bo
+    BeepObject& bo = beeps.front(); //take a note from the queue and put in bo
 
     int samplesToDo = std::min(i + bo.samplesLeft, length);
     bo.samplesLeft -= samplesToDo - i; //tells bo how much longer it has to play
 
     while (i < samplesToDo) {//this all says how high the sine wave ought to be.Frequency adjusts when you set the height
-      double volume = bo.volume(bo.t, bo.duration);
+      double volume = bo.volume * bo.attack(bo.t, bo.duration);
       stream[i] = AMPLITUDE * volume * std::sin(v * 2 * M_PI / FREQUENCY);
       i++;
       v += bo.freq;
@@ -113,15 +113,24 @@ void Beeper::generateSamples(Sint16 *stream, int length)
   }
 }
 
-void Beeper::beep(double freq, double duration, std::function<double(double, double)> volume)
-{
+typedef std::function<double(double, double)> AttackFun;
+
+
+void Beeper::beep(double freq,
+                  double duration,
+                  double volume,
+                  AttackFun attack) {
   // BeepObject bo;
   // bo.freq = freq;
   // bo.samplesLeft = duration * FREQUENCY / 1000;
   // bo.volume = volume;
 
   SDL_LockAudio(); //protects the callback function
-  beeps.push(BeepObject { freq, duration, int(duration * FREQUENCY), volume });
+  beeps.push(BeepObject { freq,
+              duration,
+              volume,
+              int(duration * FREQUENCY),
+              attack });
   SDL_UnlockAudio(); //undoes SDL_LockAudio()
 }
 
@@ -153,10 +162,83 @@ std::function<double(double)> campled(std::function<double(double)> f) {
   };
 }
 
-std::function<double(double, double)> attack (double attack_time,
-                                              double fade_out_time,
-                                              double attack_vol,
-                                              double initial_vol) {
+
+//
+// This attack function is completely linear and only works for
+// attacks that scale linearly with note length.  Some organs may have
+// this characteristic
+//
+// The "attack" is an initial increase of volume, generally, but not
+// stictly, over the ultimate sustain volume.  "decay" is the drop
+// from the attack volume down to the sustain volume.  "sustain" is
+// the volume that characterizes the note.  It however doesn't have to
+// be the majority of the note's length in time.  The "release" is the
+// drop in volume from "sustain" down to 0.
+//
+//
+// note_descriptor contains:
+//    double t_attack
+//    double l_attack
+//    double t_decay
+//    double t_sustain
+//    double l_sustain
+//    double t_release
+//
+// The time descriptors (t_*) represent the percent of the note that
+// element takes up.  Therefore, 
+//    t_attack + t_decay + t_sustain + t_release = 1
+//
+// The relative volume descriptors (l like the symbol for sound intesity
+// level) should be between 0 and 1
+// 
+AttackFun attack_new (std::vector<double> note_descriptor) {
+    double t0 = 0.0;
+    double t1 = note_descriptor[0]; // t_attack
+    double t2 = note_descriptor[2]; // t_decay
+    double t3 = note_descriptor[3]; // t_sustain
+    double t4 = note_descriptor[5]; // t_release
+    if (t0 + t1 + t2 + t3 + t4 != 0) {
+        std::cout
+            << "ERROR!! Time discriptors for attack do not add up to 1.0"
+            << std::endl;
+    }
+
+    double l1 = note_descriptor[1]; // l_attack
+    double l2 = note_descriptor[4]; // l_sustain
+    if (l1 > 1 || l2 > 1) {
+        std::cout
+            << "ERROR!! Relative volume descriptors must be less than 1.0"
+            << std::endl;
+    }
+    
+    return [t0, t1, t2, t3, t4, l1, l2]
+        (double t, double total_time) -> double {
+        
+        double attack_rate  = (l1 - 0) / (t1 - t0);
+        double decay_rate   = (l2 - l1) / (t2 - t1);
+        double sustain_rate = (l2 - l2) / (t3 - t2); // = 0 ==> const vol
+        double release_rate  = (0 - l2) / (t4 - t3);
+
+        double t_rel = t / total_time;
+        
+        if (t_rel < t1) // attack
+            return attack_rate * t_rel;
+        else if (t_rel < t2) // decay
+            return attack_rate * t1 + decay_rate * t_rel;
+        else if (t_rel < t3) // sustain
+            return attack_rate * t1 + decay_rate * t2;
+        else
+            return attack_rate * t1 + decay_rate * t2 + release_rate * t_rel;
+    };
+}
+
+
+
+
+AttackFun attack (double attack_time,
+                  double fade_out_time,
+                  double attack_vol,
+                  double initial_vol) {
   double t0 = 0.0;
   double t1 = attack_time / 2.0;
   double t2 = attack_time;
@@ -168,11 +250,14 @@ std::function<double(double, double)> attack (double attack_time,
     double t3 = total_time - fade_out_time;
     if (t < t1) {
       return attack_vol * std::sqrt(t / t1);
-    } else if (t < t2) {
+    }
+    else if (t < t2) {
       return attack_vol -  attack_difference * (t - t1) / (t2 - t1);
-    } else if (t < t3) {
+    }
+    else if (t < t3) {
       return initial_vol;
-    } else {
+    }
+    else {
       double remaining = total_time - t;
       double d = remaining / fade_out_time;
       return initial_vol * d * d;
@@ -180,12 +265,11 @@ std::function<double(double, double)> attack (double attack_time,
   };
 }
 
-std::function<double(double, double)> const_vol(double x) {
+AttackFun const_vol(double x) {
   return [x](double, double) { return x; };
 }
 
 
-typedef std::function<double(double, double)> AttackFun;
 typedef std::map<std::string, AttackFun> AttackMap;
 
 struct NamedAttack {
@@ -283,12 +367,12 @@ tone parse_string(std::string line) {
       tone.attack = const_vol(0.3);
     }
     else {
-      std::cout << data << "\n";
+        std::cout << data << std::endl;
       
-      std::string attack (data);
-      // attack << data;
-      // std::cout << "PING @ before tone.attack assigned in parse_string" << std::endl;
-      tone.attack = get_articulation(attack, "ATTACKS.fha");
+        std::string attack (data);
+        // attack << data;
+        // std::cout << "PING @ before tone.attack assigned in parse_string" << std::endl;
+        tone.attack = get_articulation(attack, "NEW_ATTACKS.fha");
     }
   }
   else {
@@ -323,7 +407,7 @@ std::vector<tone> read_file(std::string file) { //file is of format name.fhb
     return vsong;
   }
   else {
-    std::cout << "ERROR: UNABLE TO OPEN FILE-read_file" << std::endl;
+      std::cout << "ERROR: UNABLE TO OPEN FILE" << file << std::endl;
     return vsong;
   }
 }
