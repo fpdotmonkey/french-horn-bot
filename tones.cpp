@@ -120,21 +120,21 @@ void Beeper::beep(double freq,
                   double duration,
                   double volume,
                   AttackFun attack) {
-  // BeepObject bo;
-  // bo.freq = freq;
-  // bo.samplesLeft = duration * FREQUENCY / 1000;
-  // bo.volume = volume;
+    // BeepObject bo;
+    // bo.freq = freq;
+    // bo.samplesLeft = duration * FREQUENCY / 1000;
+    // bo.volume = volume;
 
-  SDL_LockAudio(); //protects the callback function
-  beeps.push(BeepObject { freq,
-              duration,
-              volume,
-              int(duration * FREQUENCY),
-              attack });
-  SDL_UnlockAudio(); //undoes SDL_LockAudio()
+    SDL_LockAudio(); //protects the callback function
+    beeps.push(BeepObject { freq,
+                duration,
+                volume,
+                int(duration * FREQUENCY),
+                attack });
+    SDL_UnlockAudio(); //undoes SDL_LockAudio()
 }
 
-void Beeper::wait()
+void Beeper::wait() // not sure what this is for
 {
   int size;
   do {
@@ -156,9 +156,10 @@ void audio_callback(void *_beeper, Uint8 *_stream, int _length)
 }
 
 std::function<double(double)> campled(std::function<double(double)> f) {
-  return [f](double x) -> double {
-    double y = f(x);
-    return std::max (std::min (1.0, y), 0.0);
+    //returns a number between 0.0 and 1.0
+    return [f](double x) -> double {
+        double y = f(x);
+        return std::max (std::min (1.0, y), 0.0);
   };
 }
 
@@ -298,9 +299,7 @@ NamedAttack articulation(std::string line) {  // TODO: make this
   //   return named_attack;
   // }
 
-  std::cout << "ON" << std::endl;
-
-  if (strcmp(data, "ZZZ") == 0) {
+  if (strcmp(data, "ZZZ") != 0) {
     data = strtok(NULL, "  ");
     attack_a = atof(data);
     data = strtok(NULL, "  ");
@@ -333,7 +332,6 @@ NamedAttack articulation(std::string line) {  // TODO: make this
 }
 
 std::vector<NamedAttack> get_attacks(std::string file) {
-    std::cout << "RALLY" << std::endl;
     std::string line;
     std::ifstream fha;
     std::vector<NamedAttack> articulations;
