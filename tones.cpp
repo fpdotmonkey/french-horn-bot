@@ -192,6 +192,7 @@ std::function<double(double)> campled(std::function<double(double)> f) {
 // level) should be between 0 and 1
 // 
 AttackFun attack_new (std::vector<double> note_descriptor) {
+    std::cout << "PING" << std::endl;
     double t0 = 0.0;
     double t1 = note_descriptor[0]; // t_attack
     double t2 = note_descriptor[2]; // t_decay
@@ -234,7 +235,7 @@ AttackFun attack_new (std::vector<double> note_descriptor) {
 
 
 
-
+/*
 AttackFun attack (double attack_time,
                   double fade_out_time,
                   double attack_vol,
@@ -263,7 +264,7 @@ AttackFun attack (double attack_time,
       return initial_vol * d * d;
     }
   };
-}
+  }*/
 
 AttackFun const_vol(double x) {
   return [x](double, double) { return x; };
@@ -277,13 +278,15 @@ struct NamedAttack {
   AttackFun fun;
 };
 
-NamedAttack articulation(std::string line) {
+NamedAttack articulation(std::string line) {  // TODO: make this
+                                              // function work for a
+                                              // general attack function
   char *str;
   str = (char *)alloca(line.size() + 1);
   memcpy(str, line.c_str(), line.size() + 1);
   char * data = strtok(str, "  ");
 
-  double attack_a, attack_b, attack_c, attack_d;
+  double attack_a, attack_b, attack_c, attack_d, attack_e, attack_f;
 
   char * name = data;
 
@@ -295,7 +298,9 @@ NamedAttack articulation(std::string line) {
   //   return named_attack;
   // }
 
-  if (strcmp(data, "ZZZ") != 0) {
+  std::cout << "ON" << std::endl;
+
+  if (strcmp(data, "ZZZ") == 0) {
     data = strtok(NULL, "  ");
     attack_a = atof(data);
     data = strtok(NULL, "  ");
@@ -304,7 +309,21 @@ NamedAttack articulation(std::string line) {
     attack_c = atof(data);
     data = strtok(NULL, "  ");
     attack_d = atof(data);
-    named_attack = { name, attack(attack_a, attack_b, attack_c, attack_d) };
+    data = strtok(NULL, "  ");
+    attack_e = atof(data);
+    data = strtok(NULL, "  ");
+    attack_f = atof(data);
+
+    std::cout << "PONG" << std::endl;
+
+    std::vector<double> attackVector  {attack_a,
+            attack_b,
+            attack_c,
+            attack_d,
+            attack_e,
+            attack_f };
+    
+    named_attack = {name, attack_new( attackVector ) };
   }
   else {
     named_attack = { "ZZZ", const_vol(0.3) };
@@ -314,22 +333,23 @@ NamedAttack articulation(std::string line) {
 }
 
 std::vector<NamedAttack> get_attacks(std::string file) {
-  std::string line;
-  std::ifstream fha;
-  std::vector<NamedAttack> articulations;
-  fha.open (file, std::ios::in);
-  if (fha.is_open()) {
-    while (std::getline(fha, line)) {
-      articulations.push_back(articulation(line));
+    std::cout << "RALLY" << std::endl;
+    std::string line;
+    std::ifstream fha;
+    std::vector<NamedAttack> articulations;
+    fha.open (file, std::ios::in);
+    if (fha.is_open()) {
+        while (std::getline(fha, line)) {
+            articulations.push_back(articulation(line));
+        }
+        fha.close();
+        
+        return articulations;
     }
-    fha.close();
-
-    return articulations;
-  }
-  else {
-    std::cout << "ERROR UNABLE TO OPEN FILE-open_attack" << std::endl;
-    return articulations;
-  }
+    else {
+        std::cout << "ERROR UNABLE TO OPEN FILE-open_attack" << std::endl;
+        return articulations;
+    }
 }
 
 AttackFun get_articulation(std::string articulation, std::string file) {
@@ -363,11 +383,11 @@ tone parse_string(std::string line) {
     data = strtok(NULL, "  ");
     
     if (data == NULL) {
-      std::cout << "Unspecified attack.  Default: ZZZ" << std::endl;
-      tone.attack = const_vol(0.3);
+        //std::cout << "Unspecified attack.  Default: ZZZ" << std::endl;
+        tone.attack = const_vol(0.3);
     }
     else {
-        std::cout << data << std::endl;
+        //std::cout << data << std::endl;
       
         std::string attack (data);
         // attack << data;
@@ -376,12 +396,12 @@ tone parse_string(std::string line) {
     }
   }
   else {
-    std::cout << "REST" << std::endl;
-    tone.hz = 0;
-    tone.volume = 0;
-    data = strtok(NULL, "  ");
-    tone.duration = atof(data);
-    tone.attack = const_vol(tone.volume);
+      //std::cout << "REST" << std::endl;
+      tone.hz = 0;
+      tone.volume = 0;
+      data = strtok(NULL, "  ");
+      tone.duration = atof(data);
+      tone.attack = const_vol(tone.volume);
   }
   // std::cout << tone.hz << std::endl;
   // std::cout << tone.duration << std::endl;
@@ -397,13 +417,13 @@ std::vector<tone> read_file(std::string file) { //file is of format name.fhb
   std::vector<tone> vsong;
   song.open (file, std::ios::in);
   if (song.is_open()) {
-    std::cout << "READING" << std::endl;
-    while (std::getline(song, line)) {
-      vsong.push_back(parse_string(line));
-      std::cout << "..." << std::endl;
+      //std::cout << "READING" << std::endl;
+      while (std::getline(song, line)) {
+          vsong.push_back(parse_string(line));
+          //std::cout << "..." << std::endl;
     }
     song.close();
-    std::cout << "FINISHED" << std::endl;
+    //std::cout << "FINISHED" << std::endl;
     return vsong;
   }
   else {
